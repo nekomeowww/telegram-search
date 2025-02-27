@@ -126,46 +126,18 @@ async function requestVerificationCode() {
   }
 }
 
-async function submitVerificationCode() {
-  const { verificationCode, isLoading } = state.value
-  if (!verificationCode || isLoading) return
+async function submitLogin() {
+  const { phoneNumber, verificationCode, twoFactorPassword, isLoading } = state.value
+  if (isLoading) return
 
   state.value.isLoading = true
   state.value.error = null
 
   try {
     const options = {
+      phoneNumber,
       code: verificationCode,
-      phoneNumber: state.value.phoneNumber,
-      ...getApiOptions()
-    }
-
-    const success = await login(options)
-
-    if (success) {
-      handleSuccessfulConnection()
-      state.value.needCode = false
-    }
-  }
-  catch (err) {
-    handleLoginError(err)
-  }
-  finally {
-    state.value.isLoading = false
-  }
-}
-
-async function submitTwoFactorPassword() {
-  const { twoFactorPassword, verificationCode, isLoading } = state.value
-  if (!twoFactorPassword || isLoading) return
-
-  state.value.isLoading = true
-  state.value.error = null
-
-  try {
-    const options = {
       password: twoFactorPassword,
-      code: verificationCode,
       ...getApiOptions()
     }
 
@@ -177,7 +149,7 @@ async function submitTwoFactorPassword() {
     }
   }
   catch (err) {
-    handleError(err, '密码验证失败，请重试', '密码验证失败: ')
+    handleLoginError(err)
   }
   finally {
     state.value.isLoading = false
@@ -252,16 +224,13 @@ function retryLogin() {
 }
 
 function handleLogin() {
-  const { needPassword, needCode, needPhoneNumber } = state.value
+  const { needPhoneNumber } = state.value
   
-  if (needPassword) {
-    submitTwoFactorPassword()
-  }
-  else if (needCode) {
-    submitVerificationCode()
-  }
-  else if (needPhoneNumber) {
+  if (needPhoneNumber) {
     requestVerificationCode()
+  }
+  else {
+    submitLogin()
   }
 }
 
