@@ -22,6 +22,7 @@ const syncDetails = computed((): SyncDetails | null => {
   }
 
   const metadata = currentCommand.value.metadata
+  // TODO: interface
   return {
     totalChats: metadata.totalChats as number | undefined,
     totalFolders: metadata.totalFolders as number | undefined,
@@ -76,11 +77,11 @@ async function handleSync(): Promise<void> {
 
   try {
     const result = await executeSync({})
-    if (result.success) {
-      toast.success('同步启动成功', { id: toastId })
+    if (!result.success) {
+      toast.error(result.error || '同步失败', { id: toastId })
     }
     else {
-      toast.error(result.error || '同步失败', { id: toastId })
+      toast.success('同步启动成功', { id: toastId })
     }
   }
   catch (error) {

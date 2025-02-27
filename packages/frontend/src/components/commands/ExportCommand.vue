@@ -71,6 +71,7 @@ const statusIcon = computed((): string => {
   if (!currentCommand.value)
     return ''
 
+  // TODO: replace with icon
   const iconMap: Record<string, string> = {
     running: '⟳',
     waiting: '⏱',
@@ -173,6 +174,7 @@ const exportDetails = computed(() => {
   }
 
   const metadata = currentCommand.value.metadata
+  // TODO: interface
   return {
     totalMessages: metadata.totalMessages as number | undefined,
     processedMessages: metadata.processedMessages as number | undefined,
@@ -198,6 +200,7 @@ const processedMessages = computed(() => {
 // Wait time countdown
 let waitTimerId: number | undefined
 
+// TODO: extract
 watch(() => currentCommand.value?.status, (status) => {
   if (status === 'waiting') {
     if (currentCommand.value?.metadata?.waitTime) {
