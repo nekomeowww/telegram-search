@@ -112,6 +112,12 @@ export function setupAuthRoutes(app: App) {
   router.get('/status', defineEventHandler(async () => {
     try {
       const client = await useTelegramClient()
+
+      // Try to connect if not connected
+      if (!await client.isConnected()) {
+        await client.connect()
+      }
+
       const connected = await client.isConnected()
       logger.debug(`Status check: connected=${connected}`)
       return createResponse({ connected })

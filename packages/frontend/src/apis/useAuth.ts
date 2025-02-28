@@ -1,7 +1,6 @@
 import { ref } from 'vue'
 
 import { apiFetch, useApi } from '../composables/api'
-import { ErrorCode } from '../types/error'
 
 interface SendCodeOptions {
   apiId?: number
@@ -63,10 +62,7 @@ export function useAuth() {
     }
     catch (err) {
       console.error('Failed to send code:', err)
-      if (err instanceof Error) {
-        throw new TypeError(ErrorCode.UNKNOWN_ERROR)
-      }
-      return false
+      throw err
     }
   }
 
@@ -87,13 +83,7 @@ export function useAuth() {
     }
     catch (err) {
       console.error('Failed to login:', err)
-
-      // Check if error is related to 2FA based on error code
-      if (err instanceof Error && err.message === ErrorCode.NEED_TWO_FACTOR_CODE) {
-        throw new Error(ErrorCode.NEED_TWO_FACTOR_CODE)
-      }
-
-      throw new Error(ErrorCode.UNKNOWN_ERROR)
+      throw err
     }
   }
 
