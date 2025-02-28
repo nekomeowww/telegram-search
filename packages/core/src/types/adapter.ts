@@ -73,7 +73,7 @@ export interface ITelegramClientAdapter extends BaseTelegramAdapter {
   /**
    * Send verification code
    */
-  sendCode: () => Promise<void>
+  sendCode: () => Promise<boolean>
 
   /**
    * Logout

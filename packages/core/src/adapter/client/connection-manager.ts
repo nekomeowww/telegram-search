@@ -180,7 +180,7 @@ export class ConnectionManager {
    * Send verification code to the user's phone
    * This is the first step of the authentication process
    */
-  public async sendCode(): Promise<void> {
+  public async sendCode(): Promise<boolean> {
     try {
       // 首先确保连接到Telegram服务器
       await this.errorHandler.withRetry(
@@ -196,11 +196,10 @@ export class ConnectionManager {
       const isAuthorized = await this.client.isUserAuthorized()
       if (isAuthorized) {
         this.logger.log('用户已授权，无需发送验证码')
-        return
       }
 
       // 发送验证码
-      await this.errorHandler.withRetry(
+      const result = await this.errorHandler.withRetry(
         () => this.client.sendCode(
           {
             apiId: this.apiId,
@@ -216,6 +215,7 @@ export class ConnectionManager {
       )
 
       this.logger.log('验证码已发送')
+      return result.success
     }
     catch (error: any) {
       this.errorHandler.handleError(error, '发送验证码过程', '发送验证码失败')

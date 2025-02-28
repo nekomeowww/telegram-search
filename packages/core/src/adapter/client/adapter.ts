@@ -104,7 +104,7 @@ export class ClientAdapter implements ITelegramClientAdapter {
    * Send verification code to the user's phone
    * This is the first step of the authentication process
    */
-  public async sendCode(): Promise<void> {
+  public async sendCode(): Promise<boolean> {
     return this.connectionManager.sendCode()
   }
 

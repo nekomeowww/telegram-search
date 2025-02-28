@@ -6,85 +6,111 @@ import { useAuth } from '../apis/useAuth'
 import { useConfig } from '../apis/useConfig'
 import { ErrorCode } from '../types/error'
 
-// State management
+// 定义登录流程的各个步骤
+type LoginStep = 'phone' | 'code' | 'code_2fa' | 'complete'
+
+// 登录状态类型定义
 interface LoginState {
+  // 基本状态
   isLoading: boolean
   isConnected: boolean
   error: string | null
+  currentStep: LoginStep
+
+  // 用户输入
   phoneNumber: string
   verificationCode: string
   twoFactorPassword: string
-  needPhoneNumber: boolean
-  needCode: boolean
-  needPassword: boolean
+
+  // API设置
   showAdvancedSettings: boolean
   apiId: string
   apiHash: string
 }
 
+// 初始化登录状态
 const state = ref<LoginState>({
   isLoading: false,
   isConnected: false,
   error: null,
+  currentStep: 'phone',
+
   phoneNumber: '',
   verificationCode: '',
   twoFactorPassword: '',
-  needPhoneNumber: true,
-  needCode: false,
-  needPassword: false,
+
   showAdvancedSettings: false,
   apiId: '',
-  apiHash: ''
+  apiHash: '',
 })
 
 const router = useRouter()
 const { checkStatus, login, sendCode } = useAuth()
 const { config, getConfig } = useConfig()
 
-// Return path for redirect after login
+// 登录成功后的重定向路径
 const returnPath = ref('/')
 
-// Computed properties
+// 根据当前步骤判断表单是否可提交
 const canSubmit = computed(() => {
-  const { needPhoneNumber, needCode, needPassword, phoneNumber, verificationCode, twoFactorPassword } = state.value
-  
-  if (needPhoneNumber && !phoneNumber) return false
-  if (needCode && !verificationCode) return false
-  if (needPassword && !twoFactorPassword) return false
-  
+  const { currentStep, phoneNumber, verificationCode, twoFactorPassword } = state.value
+
+  if (currentStep === 'phone' && !phoneNumber)
+    return false
+  if (currentStep === 'code' && !verificationCode)
+    return false
+  if (currentStep === 'code_2fa' && (!verificationCode || !twoFactorPassword))
+    return false
+
   return true
 })
 
-// Initialization
+// 计算当前步骤的展示状态
+const needPhoneNumber = computed(() => state.value.currentStep === 'phone')
+const needCode = computed(() => state.value.currentStep === 'code')
+const needCode2FA = computed(() => state.value.currentStep === 'code_2fa')
+
+// 页面初始化
 onMounted(async () => {
   await initializeLoginPage()
 })
 
+/**
+ * 初始化登录页面
+ */
 async function initializeLoginPage() {
-  // Get redirect path if exists
+  // 获取重定向路径
   const { redirect } = router.currentRoute.value.query
   if (redirect && typeof redirect === 'string') {
     returnPath.value = redirect
   }
 
+  // 获取配置并初始化
   await getConfig()
   initializeFromConfig()
+
+  // 检查登录状态
   await checkLoginStatus()
 }
 
+/**
+ * 从配置中初始化登录信息
+ */
 function initializeFromConfig() {
   if (config.value?.api?.telegram) {
     const { apiId, apiHash, phoneNumber } = config.value.api.telegram
     state.value.apiId = apiId || ''
     state.value.apiHash = apiHash || ''
-    
+
     if (phoneNumber && !state.value.phoneNumber) {
       state.value.phoneNumber = phoneNumber
     }
   }
 }
 
-// Login flow handlers
+/**
+ * 检查当前登录状态
+ */
 async function checkLoginStatus() {
   state.value.isLoading = true
   state.value.error = null
@@ -104,19 +130,28 @@ async function checkLoginStatus() {
   }
 }
 
+/**
+ * 发送验证码到用户手机
+ */
 async function requestVerificationCode() {
   const { phoneNumber, isLoading } = state.value
-  if (!phoneNumber || isLoading) return
+  if (!phoneNumber || isLoading)
+    return
 
   state.value.isLoading = true
   state.value.error = null
 
   try {
     const options = getApiOptions()
-    await sendCode(phoneNumber, options)
-    
-    updateLoginStep('code')
-    toast.success('验证码已发送到您的设备')
+    const result = await sendCode(phoneNumber, options)
+
+    if (result && result.success) {
+      goToNextStep('code')
+      toast.success('验证码已发送到您的设备')
+    }
+    else {
+      throw new Error('验证码发送失败，请重试')
+    }
   }
   catch (err) {
     handleError(err, '请求验证码失败，请重试')
@@ -126,26 +161,65 @@ async function requestVerificationCode() {
   }
 }
 
+/**
+ * 继续到2FA输入步骤
+ */
+function continueToTwoFactorStep() {
+  const { verificationCode } = state.value
+
+  if (!verificationCode) {
+    toast.error('请先输入验证码')
+    return
+  }
+
+  // 验证码填写后，进入2FA密码输入阶段
+  goToNextStep('code_2fa')
+  toast.info('请输入您的两步验证密码')
+}
+
+/**
+ * 提交登录请求
+ * 根据当前步骤提交不同的信息
+ */
 async function submitLogin() {
-  const { phoneNumber, verificationCode, twoFactorPassword, isLoading } = state.value
-  if (isLoading) return
+  const { phoneNumber, verificationCode, twoFactorPassword, isLoading, currentStep } = state.value
+  if (isLoading)
+    return
 
   state.value.isLoading = true
   state.value.error = null
 
   try {
-    const options = {
-      phoneNumber,
-      code: verificationCode,
-      password: twoFactorPassword,
-      ...getApiOptions()
+    // 构建登录请求选项
+    let options
+
+    if (currentStep === 'code') {
+      // 只有验证码，不包含2FA (我们现在使用continueToTwoFactorStep来处理)
+      options = {
+        phoneNumber,
+        code: verificationCode,
+        ...getApiOptions(),
+      }
+    }
+    else if (currentStep === 'code_2fa') {
+      // 同时发送验证码和2FA密码
+      options = {
+        phoneNumber,
+        code: verificationCode,
+        password: twoFactorPassword,
+        ...getApiOptions(),
+      }
+    }
+    else {
+      // 确保options始终有值
+      return
     }
 
     const success = await login(options)
 
     if (success) {
       handleSuccessfulConnection()
-      updateLoginStep('complete')
+      goToNextStep('complete')
     }
   }
   catch (err) {
@@ -156,31 +230,44 @@ async function submitLogin() {
   }
 }
 
-// Helper functions
+/**
+ * 获取API选项
+ */
 function getApiOptions() {
-  if (!state.value.showAdvancedSettings) return {}
+  if (!state.value.showAdvancedSettings)
+    return {}
 
   return {
     apiId: Number(state.value.apiId) || (config.value?.api?.telegram?.apiId ? Number(config.value.api.telegram.apiId) : undefined),
-    apiHash: state.value.apiHash || config.value?.api?.telegram?.apiHash
+    apiHash: state.value.apiHash || config.value?.api?.telegram?.apiHash,
   }
 }
 
+/**
+ * 处理登录成功
+ */
 function handleSuccessfulConnection() {
+  // 登录成功时记录日志 (只允许warn和error方法)
+  console.warn('登录成功，准备重定向到', returnPath.value)
   toast.success('连接成功！')
   state.value.isConnected = true
-  
+
+  // 延迟跳转，给用户一些视觉反馈
   setTimeout(() => {
     router.push(returnPath.value)
   }, 1500)
 }
 
+/**
+ * 处理登录错误
+ */
 function handleLoginError(err: unknown) {
   if (err instanceof Error) {
     state.value.error = err.message
 
+    // 处理需要2FA的情况
     if (err.message === ErrorCode.NEED_TWO_FACTOR_CODE) {
-      updateLoginStep('password')
+      goToNextStep('code_2fa')
       state.value.error = '需要输入两步验证密码'
       toast.info('需要输入两步验证密码以完成登录')
     }
@@ -193,6 +280,9 @@ function handleLoginError(err: unknown) {
   }
 }
 
+/**
+ * 通用错误处理
+ */
 function handleError(err: unknown, defaultMessage: string, prefix = '') {
   if (err instanceof Error) {
     state.value.error = err.message
@@ -204,36 +294,60 @@ function handleError(err: unknown, defaultMessage: string, prefix = '') {
   }
 }
 
-function updateLoginStep(step: 'phone' | 'code' | 'password' | 'complete') {
-  state.value.needPhoneNumber = step === 'phone'
-  state.value.needCode = step === 'code'
-  state.value.needPassword = step === 'password'
+/**
+ * 前进到指定的登录步骤
+ */
+function goToNextStep(step: LoginStep) {
+  state.value.currentStep = step
 }
 
-// UI handlers
-function retryLogin() {
+/**
+ * 重置登录流程
+ */
+function resetLogin() {
   Object.assign(state.value, {
     error: null,
     phoneNumber: '',
     verificationCode: '',
     twoFactorPassword: '',
-    needPhoneNumber: true,
-    needCode: false,
-    needPassword: false
+    currentStep: 'phone',
   })
 }
 
+/**
+ * 返回上一步
+ */
+function goToPreviousStep() {
+  const { currentStep } = state.value
+
+  if (currentStep === 'code_2fa') {
+    goToNextStep('code')
+  }
+  else if (currentStep === 'code') {
+    goToNextStep('phone')
+  }
+}
+
+/**
+ * 处理登录表单提交
+ */
 function handleLogin() {
-  const { needPhoneNumber } = state.value
-  
-  if (needPhoneNumber) {
+  const { currentStep } = state.value
+
+  if (currentStep === 'phone') {
     requestVerificationCode()
+  }
+  else if (currentStep === 'code') {
+    continueToTwoFactorStep()
   }
   else {
     submitLogin()
   }
 }
 
+/**
+ * 切换高级设置显示
+ */
 function toggleAdvancedSettings() {
   state.value.showAdvancedSettings = !state.value.showAdvancedSettings
 }
@@ -290,8 +404,52 @@ function toggleAdvancedSettings() {
               </div>
             </div>
 
-            <!-- 手机号输入框 (步骤0) -->
-            <div v-if="state.needPhoneNumber">
+            <!-- 进度指示器 -->
+            <div class="mb-4 flex justify-center">
+              <div class="flex items-center space-x-4">
+                <div class="flex flex-col items-center">
+                  <div
+                    class="h-8 w-8 flex items-center justify-center rounded-full"
+                    :class="[
+                      state.currentStep === 'phone' ? 'bg-blue-500 text-white'
+                      : (state.currentStep === 'code' || state.currentStep === 'code_2fa' || state.currentStep === 'complete') ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
+                    ]"
+                  >
+                    <div class="i-carbon-phone-filled h-4 w-4" />
+                  </div>
+                  <span class="mt-1 text-xs text-gray-600 dark:text-gray-400">手机号</span>
+                </div>
+                <div class="h-0.5 w-6 bg-gray-200 dark:bg-gray-700" :class="{ 'bg-green-500 dark:bg-green-600': state.currentStep === 'code' || state.currentStep === 'code_2fa' || state.currentStep === 'complete' }" />
+                <div class="flex flex-col items-center">
+                  <div
+                    class="h-8 w-8 flex items-center justify-center rounded-full"
+                    :class="[
+                      state.currentStep === 'code' ? 'bg-blue-500 text-white'
+                      : (state.currentStep === 'code_2fa' || state.currentStep === 'complete') ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
+                    ]"
+                  >
+                    <div class="i-carbon-chat h-4 w-4" />
+                  </div>
+                  <span class="mt-1 text-xs text-gray-600 dark:text-gray-400">验证码</span>
+                </div>
+                <div class="h-0.5 w-6 bg-gray-200 dark:bg-gray-700" :class="{ 'bg-green-500 dark:bg-green-600': state.currentStep === 'code_2fa' || state.currentStep === 'complete' }" />
+                <div class="flex flex-col items-center">
+                  <div
+                    class="h-8 w-8 flex items-center justify-center rounded-full"
+                    :class="[
+                      state.currentStep === 'code_2fa' ? 'bg-blue-500 text-white'
+                      : state.currentStep === 'complete' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
+                    ]"
+                  >
+                    <div class="i-carbon-locked h-4 w-4" />
+                  </div>
+                  <span class="mt-1 text-xs text-gray-600 dark:text-gray-400">密码</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 手机号输入框 (步骤1) -->
+            <div v-if="needPhoneNumber">
               <label for="phone" class="block text-sm text-gray-700 font-medium dark:text-gray-300">
                 Telegram 手机号
               </label>
@@ -311,8 +469,8 @@ function toggleAdvancedSettings() {
               </p>
             </div>
 
-            <!-- 验证码输入框 (步骤1) -->
-            <div v-if="state.needCode">
+            <!-- 验证码输入框 (步骤2) -->
+            <div v-if="needCode || needCode2FA">
               <label for="code" class="block text-sm text-gray-700 font-medium dark:text-gray-300">
                 验证码
               </label>
@@ -325,7 +483,9 @@ function toggleAdvancedSettings() {
                   inputmode="numeric"
                   autocomplete="one-time-code"
                   required
+                  :readonly="needCode2FA"
                   class="block w-full appearance-none border border-gray-300 rounded-md px-3 py-2 shadow-sm dark:border-gray-600 focus:border-blue-500 dark:bg-gray-700 sm:text-sm dark:text-white focus:outline-none focus:ring-blue-500 placeholder-gray-400"
+                  :class="{ 'bg-gray-100 dark:bg-gray-600': needCode2FA }"
                   placeholder="请输入您收到的验证码"
                 >
               </div>
@@ -334,8 +494,8 @@ function toggleAdvancedSettings() {
               </p>
             </div>
 
-            <!-- 两步验证密码输入框 (步骤2) -->
-            <div v-if="state.needPassword">
+            <!-- 两步验证密码输入框 (作为验证码的补充，同屏显示) -->
+            <div v-if="needCode2FA">
               <label for="password" class="block text-sm text-gray-700 font-medium dark:text-gray-300">
                 两步验证密码
               </label>
@@ -357,7 +517,7 @@ function toggleAdvancedSettings() {
             </div>
 
             <!-- 高级设置折叠面板 -->
-            <div class="mt-4">
+            <div v-if="needPhoneNumber" class="mt-4">
               <div class="flex items-center justify-between">
                 <button
                   type="button"
@@ -428,18 +588,28 @@ function toggleAdvancedSettings() {
                 <span v-if="state.isLoading" class="mr-2">
                   <div class="i-carbon-circle-dash inline-block h-4 w-4 animate-spin" />
                 </span>
-                {{ state.needPhoneNumber ? '发送验证码' : state.needPassword ? '提交密码' : '提交验证码' }}
+                {{ needPhoneNumber ? '发送验证码' : needCode ? '下一步' : '提交验证' }}
               </button>
             </div>
 
-            <!-- 重试按钮 -->
-            <div class="text-center">
+            <!-- 导航按钮 -->
+            <div class="mt-2 flex justify-center space-x-4">
               <button
-                v-if="!state.needPhoneNumber"
+                v-if="!needPhoneNumber"
                 type="button"
-                class="mt-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-                @click="retryLogin"
+                class="inline-flex items-center text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                @click="goToPreviousStep"
               >
+                <div class="i-carbon-arrow-left mr-1 h-4 w-4" />
+                返回上一步
+              </button>
+              <button
+                v-if="!needPhoneNumber"
+                type="button"
+                class="inline-flex items-center text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                @click="resetLogin"
+              >
+                <div class="i-carbon-reset mr-1 h-4 w-4" />
                 重新开始
               </button>
             </div>
