@@ -10,8 +10,8 @@ import { useSession } from '../../composables/useSession'
 const { executeSync, currentCommand, syncProgress, cleanup } = useSync()
 const { checkConnection, isConnected } = useSession()
 const isSyncing = computed(() => currentCommand.value?.status === 'running')
-const canStartSync = computed(() => (!currentCommand.value
-  || ['completed', 'failed'].includes(currentCommand.value.status)) && isConnected.value)
+// const canStartSync = computed(() => (!currentCommand.value
+//   || ['completed', 'failed'].includes(currentCommand.value.status)) && isConnected.value)
 const router = useRouter()
 const showConnectButton = ref(false)
 
