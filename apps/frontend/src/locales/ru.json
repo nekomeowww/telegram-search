@@ -55,7 +55,7 @@
       "messages_count": "{count} сообщений",
       "id": "ID: {id}",
       "channels": "Каналы",
-      "not_chats_found": "Чаты не найдены"
+      "no_chats_found": "Чаты не найдены"
     },
     "commands": {
       "export": "Экспорт",
