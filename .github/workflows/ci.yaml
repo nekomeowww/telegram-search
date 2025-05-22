@@ -23,10 +23,6 @@ jobs:
           version: '14.0'
           env: true
 
-      - name: Prepare node-gyp
-        run: |
-          pnpm add node-gyp -w
-
       - name: Install
         run: pnpm install
 
@@ -52,10 +48,6 @@ jobs:
           version: '14.0'
           env: true
 
-      - name: Prepare node-gyp
-        run: |
-          pnpm add node-gyp -w
-
       - name: Install
         run: pnpm install
 
@@ -80,10 +72,6 @@ jobs:
         with:
           version: '14.0'
           env: true
-
-      - name: Prepare node-gyp
-        run: |
-          pnpm add node-gyp -w
 
       - name: Install
         run: pnpm install
