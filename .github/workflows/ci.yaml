@@ -17,12 +17,6 @@ jobs:
           node-version: lts/*
           cache: pnpm
 
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: '14.0'
-          env: true
-
       - name: Install
         run: pnpm install
 
@@ -42,12 +36,6 @@ jobs:
           node-version: lts/*
           cache: pnpm
 
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: '14.0'
-          env: true
-
       - name: Install
         run: pnpm install
 
@@ -66,12 +54,6 @@ jobs:
         with:
           node-version: lts/*
           cache: pnpm
-
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: '14.0'
-          env: true
 
       - name: Install
         run: pnpm install

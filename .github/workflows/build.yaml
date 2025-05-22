@@ -19,12 +19,6 @@ jobs:
           node-version: lts/*
           cache: pnpm
 
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "14.0"
-          env: true
-
       # Install dependencies
       - name: Install
         run: pnpm install
